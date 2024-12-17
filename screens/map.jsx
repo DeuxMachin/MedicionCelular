@@ -1,11 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, StyleSheet, Modal, Alert, ScrollView, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+  StyleSheet,
+  Modal,
+  Alert,
+  ScrollView,
+  TextInput,
+  Animated,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 
 const { width, height } = Dimensions.get('window');
+
+// Define pointSize outside the component
+const pointSize = 30;
 
 export default function MapScreen() {
   const navigation = useNavigation();
@@ -16,20 +31,24 @@ export default function MapScreen() {
   const [measurement, setMeasurement] = useState(null);
 
   const [zoom, setZoom] = useState(1);
+  const [baseZoom, setBaseZoom] = useState(1);
   const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
 
   const [isDragging, setIsDragging] = useState(false);
   const [lastPanPosition, setLastPanPosition] = useState({ x: 0, y: 0 });
 
-  const [showImageFullScreen, setShowImageFullScreen] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
-  const [scale, setScale] = useState(null);
-  const [measurements, setMeasurements] = useState([]);
   const [scaleModalVisible, setScaleModalVisible] = useState(false);
-  const [tempScaleValue, setTempScaleValue] = useState('');
-  const [historyModalVisible, setHistoryModalVisible] = useState(false);
+  const [knownDistance, setKnownDistance] = useState('');
+  const [unit, setUnit] = useState('');
+
+  const [scaleFactor, setScaleFactor] = useState(null);
 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [containerPosition, setContainerPosition] = useState({ x: 0, y: 0 });
+
+  const [isLocked, setIsLocked] = useState(false);
+  const lockAnimation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     (async () => {
@@ -40,14 +59,20 @@ export default function MapScreen() {
     })();
   }, []);
 
-  // Cada vez que tengamos imagen y tamaño contenedor, recalculamos zoom base.
   useEffect(() => {
-    if (image && originalImageSize.width > 0 && originalImageSize.height > 0 && containerSize.width > 0 && containerSize.height > 0) {
-      const baseZoom = Math.min(
+    if (
+      image &&
+      originalImageSize.width > 0 &&
+      originalImageSize.height > 0 &&
+      containerSize.width > 0 &&
+      containerSize.height > 0
+    ) {
+      const calculatedBaseZoom = Math.min(
         containerSize.width / originalImageSize.width,
         containerSize.height / originalImageSize.height
       );
-      setZoom(baseZoom);
+      setBaseZoom(calculatedBaseZoom);
+      setZoom(calculatedBaseZoom);
       setPanPosition({ x: 0, y: 0 });
     }
   }, [image, originalImageSize, containerSize]);
@@ -67,6 +92,7 @@ export default function MapScreen() {
           setOriginalImageSize({ width: w, height: h });
           setPoints([]);
           setMeasurement(null);
+          setScaleFactor(null);
         });
       }
     } catch (error) {
@@ -88,6 +114,7 @@ export default function MapScreen() {
           setOriginalImageSize({ width: w, height: h });
           setPoints([]);
           setMeasurement(null);
+          setScaleFactor(null);
         });
       }
     } catch (error) {
@@ -96,12 +123,20 @@ export default function MapScreen() {
   };
 
   const handleImageClick = (e) => {
-    if (!image || points.length >= 2) return;
+    if (!image || isLocked) return;
 
-    const { locationX, locationY } = e.nativeEvent; 
-    const imgX = (locationX - panPosition.x) / zoom;
-    const imgY = (locationY - panPosition.y) / zoom;
+    if (points.length >= 2) {
+      Alert.alert('Límite de puntos', 'Solo puedes marcar dos puntos.');
+      return;
+    }
 
+    const { locationX, locationY } = e.nativeEvent;
+    
+    // Calculate position considering zoom and pan
+    const imgX = locationX / zoom - panPosition.x / zoom;
+    const imgY = locationY / zoom - panPosition.y / zoom;
+
+    // Convert to normalized coordinates
     const normX = imgX / originalImageSize.width;
     const normY = imgY / originalImageSize.height;
 
@@ -111,31 +146,29 @@ export default function MapScreen() {
   };
 
   useEffect(() => {
-    if (points.length === 2) {
-      const [normX1, normY1] = points[0];
-      const [normX2, normY2] = points[1];
-      const x1 = normX1 * originalImageSize.width;
-      const y1 = normY1 * originalImageSize.height;
-      const x2 = normX2 * originalImageSize.width;
-      const y2 = normY2 * originalImageSize.height;
-
+    if (points.length >= 2) {
+      const [x1, y1] = getImageCoordinates(points[points.length - 2]);
+      const [x2, y2] = getImageCoordinates(points[points.length - 1]);
       const dist = Math.hypot(x2 - x1, y2 - y1);
       setMeasurement(dist);
-      setMeasurements([...measurements, { id: Date.now().toString(), distance: dist }]);
-    } else {
-      setMeasurement(null);
     }
   }, [points]);
 
+  const getImageCoordinates = ([normX, normY]) => {
+    const x = normX * originalImageSize.width;
+    const y = normY * originalImageSize.height;
+    return [x, y];
+  };
+
   const handleTouchStart = (e) => {
-    if (e.nativeEvent.touches.length === 1) {
+    if (e.nativeEvent.touches.length === 1 && !isLocked) {
       setIsDragging(true);
       setLastPanPosition({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
     }
   };
 
   const handleTouchMove = (e) => {
-    if (isDragging && e.nativeEvent.touches.length === 1) {
+    if (isDragging && e.nativeEvent.touches.length === 1 && !isLocked) {
       const deltaX = e.nativeEvent.pageX - lastPanPosition.x;
       const deltaY = e.nativeEvent.pageY - lastPanPosition.y;
       setPanPosition({
@@ -150,15 +183,21 @@ export default function MapScreen() {
     setIsDragging(false);
   };
 
-  const resetMeasurement = () => {
+  const resetImagePosition = () => {
+    setZoom(baseZoom);
+    setPanPosition({ x: 0, y: 0 });
     setPoints([]);
     setMeasurement(null);
-    setMeasurements([]);
   };
 
   const configureScale = () => {
-    setTempScaleValue('');
+    if (points.length < 2) {
+      Alert.alert('Atención', 'Seleccione dos puntos para calibrar la escala.');
+      return;
+    }
     setScaleModalVisible(true);
+    setKnownDistance('');
+    setUnit('');
   };
 
   const getPointPosition = (normX, normY) => {
@@ -169,37 +208,53 @@ export default function MapScreen() {
 
   const getLineStyle = () => {
     if (points.length < 2) return null;
-    const [normX1, normY1] = points[0];
-    const [normX2, normY2] = points[1];
-    const { posX: x1, posY: y1 } = getPointPosition(normX1, normY1);
-    const { posX: x2, posY: y2 } = getPointPosition(normX2, normY2);
+    const { posX: x1, posY: y1 } = getPointPosition(...points[points.length - 2]);
+    const { posX: x2, posY: y2 } = getPointPosition(...points[points.length - 1]);
 
-    const lineLength = Math.hypot(x2 - x1, y2 - y1);
-    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
 
     return {
+      position: 'absolute',
       left: x1,
       top: y1,
-      width: lineLength,
-      transform: [{ rotate: `${angle}rad` }],
+      width: distance,
+      height: 2,
+      backgroundColor: '#FBBF24',
+      transform: [{ rotateZ: `${angle}rad` }],
     };
   };
 
+  const undoLastPoint = () => {
+    if (points.length > 0) {
+      setPoints(points.slice(0, -1));
+      setMeasurement(null);
+    }
+  };
+
   const displayedMeasurement = measurement !== null
-    ? scale
-      ? (measurement * scale).toFixed(2)
+    ? scaleFactor
+      ? (measurement * scaleFactor).toFixed(2)
       : measurement.toFixed(2)
     : null;
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      onLayout={(e) => {
+        const { x, y } = e.nativeEvent.layout;
+        setContainerPosition({ x, y });
+      }}
+    >
       <LinearGradient colors={['#06b6d4', '#3b82f6']} style={StyleSheet.absoluteFill} />
 
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Icon name="arrow-left" size={24} color="#fff" />
       </TouchableOpacity>
 
-      <View 
+      <View
         style={styles.imageContainer}
         onLayout={(e) => {
           const { width: cw, height: ch } = e.nativeEvent.layout;
@@ -214,42 +269,51 @@ export default function MapScreen() {
             onTouchEnd={handleTouchEnd}
           >
             <TouchableOpacity onPress={handleImageClick} activeOpacity={1}>
-              <Image
-                source={{ uri: image }}
+              <View
                 style={{
                   width: originalImageSize.width * zoom,
                   height: originalImageSize.height * zoom,
                   transform: [
                     { translateX: panPosition.x },
                     { translateY: panPosition.y },
-                  ]
+                  ],
                 }}
-                resizeMode="cover"
-              />
-              {points.length === 2 && (
-                <View style={[styles.measurementLine, getLineStyle()]}>
-                  <Text style={styles.measurementLineText}>
-                    {displayedMeasurement} {scale ? 'unidades' : 'pixeles'}
-                  </Text>
-                </View>
-              )}
-              {points.map(([normX, normY], index) => {
-                const { posX, posY } = getPointPosition(normX, normY);
-                return (
-                  <View
-                    key={index}
-                    style={[
-                      styles.point,
-                      {
-                        left: posX - 12,
-                        top: posY - 12,
-                      },
-                    ]}
-                  >
-                    <Icon name="map-marker" size={24} color="#FBBF24" />
+              >
+                <Image
+                  source={{ uri: image }}
+                  style={{
+                    width: originalImageSize.width * zoom,
+                    height: originalImageSize.height * zoom,
+                  }}
+                  resizeMode="contain"
+                />
+                {points.map(([normX, normY], index) => {
+                  const x = normX * originalImageSize.width * zoom + panPosition.x;
+                  const y = normY * originalImageSize.height * zoom + panPosition.y;
+                  return (
+                    <View
+                      key={index}
+                      style={[
+                        styles.point,
+                        {
+                          left: x - pointSize / 2,
+                          top: y - pointSize,
+                          transform: [{ scale: zoom }],
+                        },
+                      ]}
+                    >
+                      <Icon name="map-marker" size={pointSize} color="#FBBF24" />
+                    </View>
+                  );
+                })}
+                {points.length >= 2 && (
+                  <View style={getLineStyle()}>
+                    <Text style={styles.measurementLineText}>
+                      {displayedMeasurement} {scaleFactor ? unit : 'pixeles'}
+                    </Text>
                   </View>
-                );
-              })}
+                )}
+              </View>
             </TouchableOpacity>
           </View>
         ) : (
@@ -257,13 +321,50 @@ export default function MapScreen() {
             <Text style={styles.placeholderText}>Carga o toma una imagen para comenzar</Text>
           </View>
         )}
+        {/* Candado y eliminar botones */}
         {image && (
-          <TouchableOpacity
-            style={styles.fullscreenButton}
-            onPress={() => setShowImageFullScreen(true)}
-          >
-            <Icon name="fullscreen" size={24} color="#fff" />
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.lockButton}
+              onPress={() => {
+                Animated.sequence([
+                  Animated.timing(lockAnimation, {
+                    toValue: isLocked ? 0 : 1,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }),
+                ]).start();
+                setIsLocked(!isLocked);
+              }}
+            >
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      rotate: lockAnimation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg'],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <Icon name={isLocked ? 'lock' : 'lock-open'} size={24} color="#fff" />
+              </Animated.View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => {
+                Alert.alert('Eliminar Imagen', '¿Estás seguro de que deseas eliminar la imagen?', [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Eliminar', style: 'destructive', onPress: () => setImage(null) },
+                ]);
+              }}
+            >
+              <Icon name="delete" size={24} color="#fff" />
+            </TouchableOpacity>
+          </>
         )}
       </View>
 
@@ -285,13 +386,9 @@ export default function MapScreen() {
                 <Icon name="camera" size={20} color="#fff" />
                 <Text style={styles.dropdownItemText}>Tomar Foto</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.dropdownItem} onPress={() => setHistoryModalVisible(true)}>
-                <Icon name="history" size={20} color="#fff" />
-                <Text style={styles.dropdownItemText}>Ver Historial</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.dropdownItem} onPress={resetMeasurement}>
+              <TouchableOpacity style={styles.dropdownItem} onPress={resetImagePosition}>
                 <Icon name="refresh" size={20} color="#fff" />
-                <Text style={styles.dropdownItemText}>Reiniciar Medición</Text>
+                <Text style={styles.dropdownItemText}>Reiniciar Ubicación</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -303,140 +400,83 @@ export default function MapScreen() {
           <Icon name="tune" size={24} color="#fff" />
           <Text style={styles.bottomButtonText}>Configurar Escala</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomButton} onPress={() => setHistoryModalVisible(true)}>
-          <Icon name="history" size={24} color="#fff" />
-          <Text style={styles.bottomButtonText}>Ver historial</Text>
-        </TouchableOpacity>
       </View>
 
+      {/* Mover el botón "Deshacer" a la ubicación del botón "Reiniciar Puntos" */}
       {points.length > 0 && (
-        <TouchableOpacity style={styles.resetButton} onPress={resetMeasurement}>
-          <Text style={styles.resetButtonText}>Reiniciar Puntos</Text>
+        <TouchableOpacity style={styles.undoButton} onPress={undoLastPoint}>
+          <Icon name="undo" size={24} color="#fff" />
+          <Text style={styles.undoButtonText}>Deshacer</Text>
         </TouchableOpacity>
       )}
 
       <View style={styles.zoomControls}>
-        <TouchableOpacity style={styles.zoomButton} onPress={() => setZoom(Math.min(zoom + 0.1, 3))}>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={() => setZoom(Math.min(zoom + 0.1, 3))}
+        >
           <Icon name="magnify-plus" size={24} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.zoomButton} onPress={() => setZoom(Math.max(zoom - 0.1, 0.5))}>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={() => setZoom(Math.max(zoom - 0.1, baseZoom))}
+        >
           <Icon name="magnify-minus" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
       <Text style={styles.title}>MediCélula</Text>
 
-      <Modal visible={showImageFullScreen} transparent={true}>
-        <View style={styles.fullScreenModal}>
-          <TouchableOpacity
-            style={styles.closeFullScreenButton}
-            onPress={() => setShowImageFullScreen(false)}
-          >
-            <Icon name="close" size={30} color="#fff" />
-          </TouchableOpacity>
-
-          <View 
-            style={styles.imageContainer}
-            onLayout={(e) => {
-              const { width: cw, height: ch } = e.nativeEvent.layout;
-              setContainerSize({ width: cw, height: ch });
-              // Con el useEffect ya establecido, se recalcula baseZoom si cambia el layout.
-            }}
-          >
-            <View
-              style={styles.imageWrapper}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-            >
-              <TouchableOpacity onPress={handleImageClick} activeOpacity={1}>
-                <Image
-                  source={{ uri: image }}
-                  style={{
-                    width: originalImageSize.width * zoom,
-                    height: originalImageSize.height * zoom,
-                    transform: [
-                      { translateX: panPosition.x },
-                      { translateY: panPosition.y },
-                    ]
-                  }}
-                  resizeMode="cover"
-                />
-                {points.length === 2 && (
-                  <View style={[styles.measurementLine, getLineStyle()]}>
-                    <Text style={styles.measurementLineText}>
-                      {displayedMeasurement} {scale ? 'unidades' : 'pixeles'}
-                    </Text>
-                  </View>
-                )}
-                {points.map(([normX, normY], index) => {
-                  const { posX, posY } = getPointPosition(normX, normY);
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.point,
-                        {
-                          left: posX - 12,
-                          top: posY - 12,
-                        },
-                      ]}
-                    >
-                      <Icon name="map-marker" size={24} color="#FBBF24" />
-                    </View>
-                  );
-                })}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.fullScreenControls}>
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={() => setZoom(Math.min(zoom + 0.1, 3))}
-            >
-              <Icon name="magnify-plus" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={() => setZoom(Math.max(zoom - 0.1, 0.5))}
-            >
-              <Icon name="magnify-minus" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.controlButton} onPress={resetMeasurement}>
-              <Icon name="refresh" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={scaleModalVisible} transparent={true}>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={scaleModalVisible}
+        onRequestClose={() => setScaleModalVisible(false)}
+      >
         <View style={styles.modalBackground}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Configurar Escala</Text>
+            <Text style={styles.modalLabel}>Distancia conocida:</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Ingresa la escala (e.g., micrómetros por píxel)"
-              placeholderTextColor="#aaa"
+              placeholder="Ingrese la distancia conocida"
               keyboardType="numeric"
-              value={tempScaleValue}
-              onChangeText={setTempScaleValue}
+              value={knownDistance}
+              onChangeText={setKnownDistance}
+            />
+            <Text style={styles.modalLabel}>Unidad de medida:</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ingrese la unidad de medida (e.g., μm)"
+              value={unit}
+              onChangeText={setUnit}
             />
             <View style={styles.modalButtonsContainer}>
               <TouchableOpacity
                 style={styles.modalButton}
                 onPress={() => {
-                  const value = parseFloat(tempScaleValue);
-                  if (!isNaN(value)) {
-                    setScale(value);
-                    Alert.alert('Escala configurada', `Escala establecida en ${value}`);
-                    setScaleModalVisible(false);
-                  } else {
-                    Alert.alert('Valor inválido', 'Por favor ingresa un número válido');
+                  const distanceValue = parseFloat(knownDistance);
+                  if (isNaN(distanceValue) || !unit) {
+                    Alert.alert(
+                      'Entrada inválida',
+                      'Por favor ingrese una distancia válida y una unidad de medida.'
+                    );
+                    return;
                   }
+                  if (measurement === null) {
+                    Alert.alert(
+                      'Sin medición',
+                      'Debe tener dos puntos marcados para calibrar la escala.'
+                    );
+                    return;
+                  }
+                  const newScaleFactor = distanceValue / measurement;
+                  setScaleFactor(newScaleFactor);
+                  setScaleModalVisible(false);
+                  Alert.alert('Escala configurada', `1 píxel = ${(newScaleFactor).toFixed(4)} ${unit}`);
                 }}
               >
-                <Text style={styles.modalButtonText}>Aceptar</Text>
+                <Text style={styles.modalButtonText}>Guardar</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: 'red' }]}
@@ -448,35 +488,11 @@ export default function MapScreen() {
           </View>
         </View>
       </Modal>
-
-      <Modal visible={historyModalVisible} transparent={true}>
-        <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Historial de Mediciones</Text>
-            <ScrollView style={styles.historyList}>
-              {measurements.map((m) => (
-                <View key={m.id} style={styles.historyItem}>
-                  <Text style={styles.historyItemText}>
-                    Medida: {scale ? (m.distance * scale).toFixed(2) : m.distance.toFixed(2)} {scale ? 'unidades' : 'píxeles'}
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-            <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: '#2196F3' }]}
-              onPress={() => setHistoryModalVisible(false)}
-            >
-              <Text style={styles.modalButtonText}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // ... los mismos estilos que antes
   container: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -494,7 +510,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 20,
-    overflow: 'hidden', 
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -503,18 +519,11 @@ const styles = StyleSheet.create({
   },
   point: {
     position: 'absolute',
-    width: 24,
-    height: 24,
+    width: pointSize,
+    height: pointSize,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  measurementLine: {
-    position: 'absolute',
-    height: 2,
-    backgroundColor: '#FBBF24',
-    zIndex: 5,
-    transformOrigin: 'left',
   },
   measurementLineText: {
     position: 'absolute',
@@ -523,9 +532,9 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 4,
     fontSize: 12,
-    top: -20,
+    top: -25,
     left: '50%',
-    transform: [{ translateX: -25 }],
+    transform: [{ translateX: -pointSize / 2 }],
   },
   placeholder: {
     justifyContent: 'center',
@@ -593,38 +602,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
-  fullscreenButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 5,
-    borderRadius: 20,
-  },
-  fullScreenModal: {
-    flex: 1,
-    backgroundColor: 'black',
-  },
-  closeFullScreenButton: {
-    position: 'absolute',
-    top: '5%',
-    right: '5%',
-    zIndex: 10,
-  },
-  fullScreenControls: {
-    position: 'absolute',
-    bottom: '10%',
-    left: '50%',
-    transform: [{ translateX: -width * 0.25 }],
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '50%',
-  },
-  controlButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    padding: 10,
-    borderRadius: 10,
-  },
   zoomControls: {
     position: 'absolute',
     bottom: '12%',
@@ -644,6 +621,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  undoButton: {
+    position: 'absolute',
+    bottom: '15%',
+    left: '5%',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 10,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  undoButtonText: {
+    color: '#fff',
+    marginLeft: 5,
+    fontSize: 16,
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255,0,0,0.6)',
+    padding: 5,
+    borderRadius: 20,
+  },
+  lockButton: {
+    position: 'absolute',
+    top: 10,
+    left: 10, // Opuesto al botón de eliminar
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 5,
+    borderRadius: 20,
+    zIndex: 10,
+  },
   modalBackground: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -661,56 +670,34 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     textAlign: 'center',
-    color: '#000'
+    color: '#000',
+  },
+  modalLabel: {
+    fontSize: 16,
+    color: '#000',
+    marginTop: 10,
   },
   modalInput: {
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 5,
     padding: 10,
-    marginBottom: 20,
     color: '#000',
   },
   modalButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginTop: 20,
   },
   modalButton: {
     backgroundColor: '#06b6d4',
     padding: 10,
     borderRadius: 5,
+    width: '40%',
+    alignItems: 'center',
   },
   modalButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
-  },
-  historyList: {
-    maxHeight: 150,
-  },
-  historyItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 5,
-  },
-  historyItemText: {
-    color: '#000',
-  },
-  resetButton: {
-    position: 'absolute',
-    bottom: '19%',
-    left: '50%',
-    transform: [{ translateX: -width * 0.25 }],
-    backgroundColor: '#FBBF24',
-    padding: 12,
-    borderRadius: 12,
-    zIndex: 1,
-    width: width * 0.5,
-    alignItems: 'center',
-  },
-  resetButtonText: {
-    color: '#1E3A8A',
     fontSize: 16,
-    fontWeight: 'bold',
   },
 });
