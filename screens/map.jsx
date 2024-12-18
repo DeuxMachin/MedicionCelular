@@ -45,7 +45,6 @@ export default function MapScreen() {
   const [scaleFactor, setScaleFactor] = useState(null);
 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [containerPosition, setContainerPosition] = useState({ x: 0, y: 0 });
 
   const [isLocked, setIsLocked] = useState(false);
   const lockAnimation = useRef(new Animated.Value(0)).current;
@@ -130,16 +129,14 @@ export default function MapScreen() {
       return;
     }
 
+    // Get touch coordinates relative to the image
     const { locationX, locationY } = e.nativeEvent;
-    
-    // Calculate position considering zoom and pan
-    const imgX = locationX / zoom - panPosition.x / zoom;
-    const imgY = locationY / zoom - panPosition.y / zoom;
 
-    // Convert to normalized coordinates
-    const normX = imgX / originalImageSize.width;
-    const normY = imgY / originalImageSize.height;
+    // Normalize the coordinates based on the original image size
+    const normX = locationX / originalImageSize.width;
+    const normY = locationY / originalImageSize.height;
 
+    // Ensure the touch is within the image bounds
     if (normX >= 0 && normX <= 1 && normY >= 0 && normY <= 1) {
       setPoints([...points, [normX, normY]]);
     }
@@ -201,15 +198,19 @@ export default function MapScreen() {
   };
 
   const getPointPosition = (normX, normY) => {
-    const posX = normX * originalImageSize.width * zoom + panPosition.x;
-    const posY = normY * originalImageSize.height * zoom + panPosition.y;
+    const posX = normX * originalImageSize.width;
+    const posY = normY * originalImageSize.height;
     return { posX, posY };
   };
 
   const getLineStyle = () => {
     if (points.length < 2) return null;
-    const { posX: x1, posY: y1 } = getPointPosition(...points[points.length - 2]);
-    const { posX: x2, posY: y2 } = getPointPosition(...points[points.length - 1]);
+    const [startPoint, endPoint] = points.slice(-2);
+
+    const x1 = startPoint[0] * originalImageSize.width;
+    const y1 = startPoint[1] * originalImageSize.height;
+    const x2 = endPoint[0] * originalImageSize.width;
+    const y2 = endPoint[1] * originalImageSize.height;
 
     const dx = x2 - x1;
     const dy = y2 - y1;
@@ -223,7 +224,8 @@ export default function MapScreen() {
       width: distance,
       height: 2,
       backgroundColor: '#FBBF24',
-      transform: [{ rotateZ: `${angle}rad` }],
+      transform: [{ rotate: `${angle}rad` }],
+      transformOrigin: 'top left',
     };
   };
 
@@ -234,20 +236,15 @@ export default function MapScreen() {
     }
   };
 
-  const displayedMeasurement = measurement !== null
-    ? scaleFactor
-      ? (measurement * scaleFactor).toFixed(2)
-      : measurement.toFixed(2)
-    : null;
+  const displayedMeasurement =
+    measurement !== null
+      ? scaleFactor
+        ? (measurement * scaleFactor).toFixed(2)
+        : measurement.toFixed(2)
+      : null;
 
   return (
-    <View
-      style={styles.container}
-      onLayout={(e) => {
-        const { x, y } = e.nativeEvent.layout;
-        setContainerPosition({ x, y });
-      }}
-    >
+    <View style={styles.container}>
       <LinearGradient colors={['#06b6d4', '#3b82f6']} style={StyleSheet.absoluteFill} />
 
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -268,60 +265,61 @@ export default function MapScreen() {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <TouchableOpacity onPress={handleImageClick} activeOpacity={1}>
-              <View
-                style={{
-                  width: originalImageSize.width * zoom,
-                  height: originalImageSize.height * zoom,
-                  transform: [
-                    { translateX: panPosition.x },
-                    { translateY: panPosition.y },
-                  ],
-                }}
-              >
-                <Image
-                  source={{ uri: image }}
-                  style={{
-                    width: originalImageSize.width * zoom,
-                    height: originalImageSize.height * zoom,
-                  }}
-                  resizeMode="contain"
-                />
-                {points.map(([normX, normY], index) => {
-                  const x = normX * originalImageSize.width * zoom + panPosition.x;
-                  const y = normY * originalImageSize.height * zoom + panPosition.y;
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.point,
-                        {
-                          left: x - pointSize / 2,
-                          top: y - pointSize,
-                          transform: [{ scale: zoom }],
-                        },
-                      ]}
-                    >
-                      <Icon name="map-marker" size={pointSize} color="#FBBF24" />
+            <Animated.View
+              style={{
+                width: originalImageSize.width,
+                height: originalImageSize.height,
+                transform: [
+                  { translateX: panPosition.x },
+                  { translateY: panPosition.y },
+                  { scale: zoom },
+                ],
+              }}
+            >
+              <TouchableOpacity onPress={handleImageClick} activeOpacity={1}>
+                <View>
+                  <Image
+                    source={{ uri: image }}
+                    style={{
+                      width: originalImageSize.width,
+                      height: originalImageSize.height,
+                    }}
+                    resizeMode="contain"
+                  />
+                  {points.map(([normX, normY], index) => {
+                    const { posX, posY } = getPointPosition(normX, normY);
+                    return (
+                      <View
+                        key={index}
+                        style={[
+                          styles.point,
+                          {
+                            left: posX - pointSize / 2,
+                            top: posY - pointSize,
+                          },
+                        ]}
+                      >
+                        <Icon name="map-marker" size={pointSize} color="#FBBF24" />
+                      </View>
+                    );
+                  })}
+                  {points.length >= 2 && (
+                    <View style={getLineStyle()}>
+                      <Text style={styles.measurementLineText}>
+                        {displayedMeasurement} {scaleFactor ? unit : 'pixeles'}
+                      </Text>
                     </View>
-                  );
-                })}
-                {points.length >= 2 && (
-                  <View style={getLineStyle()}>
-                    <Text style={styles.measurementLineText}>
-                      {displayedMeasurement} {scaleFactor ? unit : 'pixeles'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
+                  )}
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
         ) : (
           <View style={styles.placeholder}>
             <Text style={styles.placeholderText}>Carga o toma una imagen para comenzar</Text>
           </View>
         )}
-        {/* Candado y eliminar botones */}
+        {/* Botones de bloqueo y eliminación */}
         {image && (
           <>
             <TouchableOpacity
@@ -402,7 +400,7 @@ export default function MapScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Mover el botón "Deshacer" a la ubicación del botón "Reiniciar Puntos" */}
+      {/* Botón "Deshacer" */}
       {points.length > 0 && (
         <TouchableOpacity style={styles.undoButton} onPress={undoLastPoint}>
           <Icon name="undo" size={24} color="#fff" />
@@ -473,7 +471,7 @@ export default function MapScreen() {
                   const newScaleFactor = distanceValue / measurement;
                   setScaleFactor(newScaleFactor);
                   setScaleModalVisible(false);
-                  Alert.alert('Escala configurada', `1 píxel = ${(newScaleFactor).toFixed(4)} ${unit}`);
+                  Alert.alert('Escala configurada', `1 píxel = ${newScaleFactor.toFixed(4)} ${unit}`);
                 }}
               >
                 <Text style={styles.modalButtonText}>Guardar</Text>
@@ -493,6 +491,7 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ... estilos existentes
   container: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -521,7 +520,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: pointSize,
     height: pointSize,
-    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
