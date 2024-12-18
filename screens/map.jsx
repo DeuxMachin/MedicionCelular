@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 const { width, height } = Dimensions.get('window');
 
-// Define pointSize outside the component
+
 const pointSize = 30;
 
 export default function MapScreen() {
@@ -129,14 +129,14 @@ export default function MapScreen() {
       return;
     }
 
-    // Get touch coordinates relative to the image
+    
     const { locationX, locationY } = e.nativeEvent;
 
-    // Normalize the coordinates based on the original image size
+  
     const normX = locationX / originalImageSize.width;
     const normY = locationY / originalImageSize.height;
 
-    // Ensure the touch is within the image bounds
+    
     if (normX >= 0 && normX <= 1 && normY >= 0 && normY <= 1) {
       setPoints([...points, [normX, normY]]);
     }
@@ -423,7 +423,7 @@ export default function MapScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.title}>MediCélula</Text>
+      <Text style={styles.title}>MicroVista</Text>
 
       <Modal
         animationType="slide"
@@ -491,14 +491,14 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ... estilos existentes
+  
   container: {
     flex: 1,
     backgroundColor: 'transparent',
   },
   backButton: {
     position: 'absolute',
-    top: '5%',
+    top: '7.5%',
     left: '5%',
     zIndex: 10,
   },
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   imageWrapper: {
-    // Contenedor vacío para manejar gestos
+   
   },
   point: {
     position: 'absolute',
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   },
   optionsMenuContainer: {
     position: 'absolute',
-    top: '5%',
+    top: '6%',
     right: '5%',
     zIndex: 10,
   },
@@ -571,6 +571,7 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: {
     color: '#fff',
+    top: 2,
     marginLeft: 10,
   },
   bottomButtonsContainer: {
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
   },
   title: {
     position: 'absolute',
-    top: '5%',
+    top: '7%',
     alignSelf: 'center',
     color: 'white',
     fontSize: 24,
@@ -621,13 +622,19 @@ const styles = StyleSheet.create({
   },
   undoButton: {
     position: 'absolute',
-    bottom: '15%',
-    left: '5%',
+    bottom: '20%', 
+    left: '33%',
     backgroundColor: 'rgba(0,0,0,0.6)',
     padding: 10,
     borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
+    
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 5,
   },
   undoButtonText: {
     color: '#fff',

@@ -87,7 +87,7 @@ export default function HomeScreen() {
         entering={FadeInDown.duration(800)}
         style={styles.content}
       >
-        <Text style={styles.title}>Bienvenido a <Text style={styles.highlight}>MediCélula</Text></Text>
+        <Text style={styles.title}>Bienvenido a <Text style={styles.highlight}>MicroVista</Text></Text>
         <Text style={styles.subtitle}>Analiza y visualiza estructuras celulares con precisión.</Text>
 
         <View style={styles.features}>
@@ -104,7 +104,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      <Text style={styles.footer}>© 2024 MediCélula. Todos los derechos reservados.</Text>
+      <Text style={styles.footer}>© 2024 MicroVista. Todos los derechos reservados.</Text>
     </View>
   );
 }
