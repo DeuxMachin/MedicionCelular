@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Dimensions, Image } from 'react-native';
 import Animated, { 
   useAnimatedStyle, 
   withRepeat, 
@@ -80,31 +80,47 @@ export default function HomeScreen() {
         colors={['#06b6d4', '#3b82f6']}
         style={StyleSheet.absoluteFill}
       />
-      
+
       <AnimatedBackground />
+
+      {/* Logo en el borde superior */}
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../assets/UCT.png')}
+          style={styles.logo}
+        />
+      </View>
 
       <Animated.View 
         entering={FadeInDown.duration(800)}
         style={styles.content}
       >
-        <Text style={styles.title}>Bienvenido a <Text style={styles.highlight}>MediCélula</Text></Text>
-        <Text style={styles.subtitle}>Analiza y visualiza estructuras celulares con precisión.</Text>
+        <Text style={styles.title}>Análisis Celular</Text>
+        <Text style={styles.subtitle}>Sistema de medición y análisis de estructuras celulares de alta precisión</Text>
 
         <View style={styles.features}>
-          <Feature iconName="microscope" title="Medición Precisa" description="Mide estructuras celulares con exactitud." />
-          <Feature iconName="flash" title="Análisis Rápido" description="Procesa imágenes microscópicas rápidamente." />
-          <Feature iconName="chart-bar" title="Visualización Clara" description="Genera gráficos detallados de tus análisis." />
+          <Feature iconName="microscope" title="Análisis Preciso" description="Mediciones exactas de estructuras celulares" />
+          <Feature iconName="book" title="Tutorial Interactivo" description="Guía paso a paso del proceso de medición" />
         </View>
 
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('MapScreen')}
-          style={styles.buttonContainer}
-        >
-          <Text style={styles.buttonText}>Comenzar</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => navigation.navigate('MapScreen')}
+          >
+            <Text style={styles.buttonText}>Iniciar Análisis</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.buttonOutline}
+            onPress={() => navigation.navigate('TutorialScreen')}
+          >
+            <Text style={styles.buttonText}>Ver Tutorial</Text>
+          </TouchableOpacity>
+        </View>
       </Animated.View>
 
-      <Text style={styles.footer}>© 2024 MediCélula. Todos los derechos reservados.</Text>
+      <Text style={styles.footer}>© 2025 Universidad Católica de Temuco - Financiado por el PID</Text>
     </View>
   );
 }
@@ -123,40 +139,32 @@ const styles = StyleSheet.create({
     maxWidth: 800,
   },
   title: {
-    fontSize: 40,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 16,
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    color: '#fff',
+    marginBottom: 10,
   },
   highlight: {
     color: '#FBBF24',
   },
   subtitle: {
-    fontSize: 18,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 24,
+    fontSize: 16,
     textAlign: 'center',
-    lineHeight: 24,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    color: '#fff',
+    marginBottom: 20,
   },
   features: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'space-around',
+    marginBottom: 20,
     flexWrap: 'wrap',
   },
   featureItem: {
     alignItems: 'center',
-    marginHorizontal: 8,
-    marginBottom: 16,
-    width: width * 0.4, // Ajustar el ancho de las tarjetas
+    marginHorizontal: 1,
+    marginBottom: 1,
+    width: 100, 
   },
   iconContainer: {
     width: 64,
@@ -169,7 +177,7 @@ const styles = StyleSheet.create({
   },
   featureTitle: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: 'bold',
     marginBottom: 4,
     textAlign: 'center',
@@ -179,32 +187,62 @@ const styles = StyleSheet.create({
   },
   featureDescription: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    fontSize: 10,
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 10,
   },
   buttonContainer: {
-    backgroundColor: '#FBBF24',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
   },
   buttonText: {
-    color: '#1E3A8A',
-    fontSize: 18,
+    color: '#000',
+    fontSize: 16,
     fontWeight: 'bold',
   },
   footer: {
     position: 'absolute',
     bottom: 16,
+    width: '100%',
+    textAlign: 'center',
     color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 12,
+  },
+  button: {
+    backgroundColor: '#FFB81C',
+    borderColor: '#fff',
+    borderWidth: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    marginBottom: 12,
+    marginRight: 12,
+    minWidth: '40%',
+    alignItems: 'center',
+  },
+  buttonOutline: {
+    borderColor: '#fff',
+    backgroundColor: '#FFB81C',
+    borderWidth: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    marginBottom: 12,
+    minWidth: '40%',
+    alignItems: 'center',
+  },
+  logoContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  logo: {
+    width: 200,
+    height: 50,
+    resizeMode: 'contain',
   },
 });
